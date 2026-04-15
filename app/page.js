@@ -1,64 +1,131 @@
-import Image from "next/image";
-import styles from "./page.module.css";
+"use client";
+
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import {
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  signInWithPopup,
+} from "firebase/auth";
+import { doc, serverTimestamp, setDoc } from "firebase/firestore";
+import { auth, db, googleProvider } from "@/lib/firebase";
+import { getAuthErrorMessage } from "@/lib/auth-errors";
 
 export default function Home() {
+  const router = useRouter();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        router.replace("/home");
+      }
+    });
+
+    return () => unsubscribe();
+  }, [router]);
+
+  async function saveUserData(user) {
+    await setDoc(
+      doc(db, "users", user.uid),
+      {
+        uid: user.uid,
+        name: user.displayName || "",
+        email: user.email || "",
+        photoURL: user.photoURL || "",
+        lastLoginAt: serverTimestamp(),
+      },
+      { merge: true }
+    );
+  }
+
+  async function handleEmailLogin(event) {
+    event.preventDefault();
+    setErrorMessage("");
+    setIsLoading(true);
+
+    try {
+      const result = await signInWithEmailAndPassword(auth, email, password);
+      await saveUserData(result.user);
+      router.push("/home");
+    } catch (error) {
+      setErrorMessage(getAuthErrorMessage(error));
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  async function handleGoogleLogin() {
+    setErrorMessage("");
+    setIsLoading(true);
+
+    try {
+      const result = await signInWithPopup(auth, googleProvider);
+      await saveUserData(result.user);
+      router.push("/home");
+    } catch (error) {
+      setErrorMessage(getAuthErrorMessage(error));
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
   return (
-    <div className={styles.page}>
-      <main className={styles.main}>
-        <Image
-          className={styles.logo}
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className={styles.intro}>
-          <h1>To get started, edit the page.js file.</h1>
-          <p>
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div className="page-wrap">
+      <main className="auth-card">
+        <h1>Event Ticketing Login</h1>
+        <p className="muted-text">Sign in to browse events and manage your tickets.</p>
+
+        <form className="auth-form" onSubmit={handleEmailLogin}>
+          <label htmlFor="email">Email</label>
+          <input
+            id="email"
+            name="email"
+            type="email"
+            placeholder="you@example.com"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            required
+          />
+
+          <label htmlFor="password">Password</label>
+          <input
+            id="password"
+            name="password"
+            type="password"
+            placeholder="Enter your password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            required
+          />
+
+          <button type="submit" className="btn btn-primary">
+            {isLoading ? "Please wait..." : "Login"}
+          </button>
+        </form>
+
+        {errorMessage ? <p className="form-error">{errorMessage}</p> : null}
+
+        <div className="divider">
+          <span>or</span>
         </div>
-        <div className={styles.ctas}>
-          <a
-            className={styles.primary}
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className={styles.logo}
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className={styles.secondary}
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+
+        <button
+          type="button"
+          className="btn btn-google"
+          onClick={handleGoogleLogin}
+          disabled={isLoading}
+        >
+          Continue with Google
+        </button>
+
+        <div className="link-row">
+          <span>Routing demo:</span>
+          <Link href="/profile/demo-user-001">View sample profile</Link>
         </div>
       </main>
     </div>
